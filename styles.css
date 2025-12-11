@@ -1,0 +1,24 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+#grid {
+  width: 900px;
+  height: 900px;
+  margin: 0;
+  background-color: red;
+
+  display: grid;
+  /*grid-template-columns: repeat(5, 20px);*/
+  gap: 1px;
+  grid-auto-rows: 20px;
+}
+
+.cell {
+  background-color: blue;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+}

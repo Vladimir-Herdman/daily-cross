@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Daily Mini</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <p id="title">The Daily Gander</p>
+    <div id="grid"></div>
+
+    <script>
+    const text = `
+this is
+ o   t
+ want
+
+hooooly
+    n
+    l
+    y
+`
+    const grid = document.getElementById("grid");
+    const arr = text_to_array(text);
+    console.log(arr);
+
+    grid.style.gridTemplateColumns = `repeat(${arr[0].length}, 20px)`;
+    for (let i=0; i<arr.length; i++) {
+      for (let j=0; j<arr[0].length; j++) {
+        const cv = arr[i][j];
+        grid.innerHTML += `<div class="cell">${cv === " " ? "" : cv}</div>`;
+      }
+    }
+
+    function text_to_array(text) {
+      let lines = text.split("\n");
+      let maxw = 0;
+      lines.forEach((line) => {maxw = Math.max(maxw, line.length);});
+      for (let i=0; i<lines.length; i++) {
+        let len_diff = maxw - lines[i].length;
+        lines[i] += " ".repeat(len_diff);
+      }
+
+      let arr = [];
+      for (let i=0; i<lines.length; i++) {
+        const line = lines[i];
+        if (line.trim().length === 0) {continue;}
+        let line_characters = [];
+        for (const ch of line) {
+          line_characters.push(ch);
+        }
+        arr.push(line_characters);
+      }
+      return arr;
+    }
+
+    </script>
+  </body>
+</html>
