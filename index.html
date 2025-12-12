@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <title>Daily Mini</title>
-    <link rel="stylesheet" href="./public/stylesheets/styles.css">
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <p id="title">The Daily Gander</p>
@@ -11,26 +11,79 @@
 
     <script>
     const text = `
-this is
- o   t
+this
+ o  i 
  want
-
+ o
 hooooly
     n
     l
     y
-`
+`;
     const grid = document.getElementById("grid");
     const arr = text_to_array(text);
-    console.log(arr);
 
-    grid.style.gridTemplateColumns = `repeat(${arr[0].length}, 20px)`;
+    grid.style.gridTemplateColumns = `repeat(${arr[0].length}, var(--cell-size))`;
     for (let i=0; i<arr.length; i++) {
       for (let j=0; j<arr[0].length; j++) {
         const cv = arr[i][j];
-        grid.innerHTML += `<div class="cell">${cv === " " ? "" : cv}</div>`;
+        if (!(cv === " ")) {
+          grid.innerHTML += `<div class="cell" id="${i}-${j}" contenteditable="true"></div>`; //[column][row]
+        } else {
+          grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
+        }
       }
     }
+
+    grid.addEventListener("beforeinput", (e) => {
+      const cell = e.target;
+      if (!cell.classList.contains("cell")) {return;}
+      if ((e.inputType === "insertText" && e.data === " ") || (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) {
+        e.preventDefault();
+        return;
+      }
+    });
+
+    grid.addEventListener("input", (e) => {
+      const cell = e.target;
+      if (e.inputType === "deleteContentBackward") {
+        cell.textContent = "";
+        return;
+      }
+      if (!cell.classList.contains("cell")) {return;}
+
+      const char = e.data[0];
+      if (char === " ") {return;}
+
+      const char_code = char.charCodeAt(0);
+      if (!((char_code >= 65 && char_code <= 90) || (char_code >= 97 && char_code <= 122))) {return;}
+
+      cell.textContent = char;
+    });
+
+    grid.addEventListener("keydown", (e) => {
+      const last_active_id = document.activeElement.id;
+      if (!last_active_id.includes("-")) {return;}
+
+      let to_focus;
+      switch (e.key) {
+        case "ArrowUp":
+          to_focus = document.getElementById(`${Number(last_active_id[0])-1}-${last_active_id[2]}`);
+          break;
+        case "ArrowDown":
+          to_focus = document.getElementById(`${Number(last_active_id[0])+1}-${last_active_id[2]}`);
+          break;
+        case "ArrowLeft":
+          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])-1}`);
+          break;
+        case "ArrowRight":
+          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])+1}`);
+          break;
+      }
+
+      if (!to_focus || to_focus.classList.contains("noninteract")) {return;}
+      to_focus.focus();
+    });
 
     function text_to_array(text) {
       let lines = text.split("\n");
@@ -47,7 +100,7 @@ hooooly
         if (line.trim().length === 0) {continue;}
         let line_characters = [];
         for (const ch of line) {
-          line_characters.push(ch);
+          line_characters.push(ch.toUpperCase());
         }
         arr.push(line_characters);
       }

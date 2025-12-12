@@ -1,0 +1,39 @@
+:root {
+  --cell-border: grey;
+  --cell-bg: #ffffff;
+  --cell-size: 100px;
+  --grid-bg: #000000;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+#grid {
+  width: fit-content;
+  height: fit-content;
+  margin: 0;
+  background-color: var(--grid-bg);
+
+  display: grid;
+  /*grid-template-columns: repeat(5, 20px);*/
+  grid-auto-rows: var(--cell-size);
+}
+
+.cell {
+  background-color: var(--cell-bg);
+  border: solid 1px var(--cell-border);
+  caret-color: transparent;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.cell:focus {
+  background-color: #FFCE1B;
+}
+
+.cell.noninteract {
+  background-color: var(--grid-bg);
+}
