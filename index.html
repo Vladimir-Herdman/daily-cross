@@ -8,9 +8,140 @@
   <body>
     <p id="title">The Daily Gander</p>
     <div id="grid"></div>
+    <button onclick="button_save_grid()">save text as link</button>
 
     <script>
-    const text = `
+      const grid = document.getElementById("grid");
+
+      async function decompress(encoded_b64) { //-> unencoded text
+        const byteArray = Uint8Array.fromBase64(encoded_b64, {alphabet: 'base64url'})
+        const stream = new DecompressionStream('deflate-raw')
+        const writer = stream.writable.getWriter()
+        writer.write(byteArray)
+        writer.close()
+        const buffer = await new Response(stream.readable).arrayBuffer()
+        return new TextDecoder().decode(buffer)
+      }
+
+      async function compress(str) {
+        const byteArray = new TextEncoder().encode(str);
+        const stream = new CompressionStream('deflate-raw');
+        const writer = stream.writable.getWriter();
+        writer.write(byteArray);
+        writer.close();
+        const buffer = await new Response(stream.readable).arrayBuffer();
+        return new Uint8Array(buffer).toBase64({alphabet: 'base64url'});
+      }
+
+      async function compress_grid_text() { //-> encoded text
+        let grid_text = "";
+        let lastrownum = 0;
+        for (const child of grid.children) {
+          if (child.id[0] != lastrownum) {
+            lastrownum = child.id[0];
+            grid_text += "\n"
+          }
+          const char = child.innerHTML;
+          if (char) grid_text += char;
+          else grid_text += " ";
+        }
+        return await compress(grid_text)
+      }
+
+      function text_to_array(grid_text) {
+        let lines = grid_text.split("\n");
+        let maxw = 0;
+        lines.forEach((line) => {maxw = Math.max(maxw, line.length);});
+        for (let i=0; i<lines.length; i++) {
+          let len_diff = maxw - lines[i].length;
+          lines[i] += " ".repeat(len_diff);
+        }
+
+        let arr = [];
+        for (let i=0; i<lines.length; i++) {
+          const line = lines[i];
+          if (line.trim().length === 0) {continue;}
+          let line_characters = [];
+          for (const ch of line) {
+            line_characters.push(ch.toUpperCase());
+          }
+          arr.push(line_characters);
+        }
+        return arr;
+      }
+
+      function fill_grid_cells(grid_text) { //-> void
+        const arr = text_to_array(grid_text)
+        grid.style.gridTemplateColumns = `repeat(${arr[0].length}, var(--cell-size))`;
+        grid.innerHTML = "";
+        for (let i=0; i<arr.length; i++) {
+          for (let j=0; j<arr[0].length; j++) {
+            const cv = arr[i][j];
+            if (!(cv === " ")) {
+              grid.innerHTML += `<div class="cell" id="${i}-${j}" contenteditable="true"></div>`; //[column][row]
+            } else {
+              grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
+            }
+          }
+        }
+      }
+
+      grid.addEventListener("beforeinput", (e) => {
+        const cell = e.target;
+        if (!cell.classList.contains("cell")) {return;}
+        if ((e.inputType === "insertText" && e.data === " ") || (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) {
+          e.preventDefault();
+          return;
+        }
+      });
+
+      grid.addEventListener("input", (e) => {
+        const cell = e.target;
+        if (e.inputType === "deleteContentBackward") {
+          cell.textContent = "";
+          return;
+        }
+        if (!cell.classList.contains("cell")) {return;}
+
+        const char = e.data[0];
+        if (char === " ") {return;}
+
+        const char_code = char.charCodeAt(0);
+        if (!((char_code >= 65 && char_code <= 90) || (char_code >= 97 && char_code <= 122))) {return;}
+
+        cell.textContent = char;
+      });
+
+      grid.addEventListener("keydown", (e) => {
+        const last_active_id = document.activeElement.id;
+        if (!last_active_id.includes("-")) {return;}
+
+        let to_focus;
+        switch (e.key) {
+          case "ArrowUp":
+            to_focus = document.getElementById(`${Number(last_active_id[0])-1}-${last_active_id[2]}`);
+            break;
+          case "ArrowDown":
+            to_focus = document.getElementById(`${Number(last_active_id[0])+1}-${last_active_id[2]}`);
+            break;
+          case "ArrowLeft":
+            to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])-1}`);
+            break;
+          case "ArrowRight":
+            to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])+1}`);
+            break;
+        }
+
+        if (!to_focus || to_focus.classList.contains("noninteract")) {return;}
+        to_focus.focus();
+      });
+
+      (async () => {
+        try {
+          const pzl_encoding = new URLSearchParams(window.location.search).get("pzl");
+          fill_grid_cells(await decompress(pzl_encoding));
+        } catch {
+          const text = `
 this
  o  i 
  want
@@ -18,95 +149,18 @@ this
 hooooly
     n
     l
-    y
-`;
-    const grid = document.getElementById("grid");
-    const arr = text_to_array(text);
-
-    grid.style.gridTemplateColumns = `repeat(${arr[0].length}, var(--cell-size))`;
-    for (let i=0; i<arr.length; i++) {
-      for (let j=0; j<arr[0].length; j++) {
-        const cv = arr[i][j];
-        if (!(cv === " ")) {
-          grid.innerHTML += `<div class="cell" id="${i}-${j}" contenteditable="true"></div>`; //[column][row]
-        } else {
-          grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
+    y`;
+          fill_grid_cells(text);
         }
+      })();
+
+      async function button_save_grid() {
+        const grid_encoded = await compress_grid_text();
+        //TODO: Still checking against localhost size (18), change to https type check
+        if (18 + grid_encoded.length > 2000) {console.error("URL number of characters greater than 2000, might not work in certain browsers.");}
+        //TODO: Still using localhost, change for use in both localhost and https style
+        await navigator.clipboard.writeText(`localhost:8001/?pzl=${grid_encoded}`);
       }
-    }
-
-    grid.addEventListener("beforeinput", (e) => {
-      const cell = e.target;
-      if (!cell.classList.contains("cell")) {return;}
-      if ((e.inputType === "insertText" && e.data === " ") || (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) {
-        e.preventDefault();
-        return;
-      }
-    });
-
-    grid.addEventListener("input", (e) => {
-      const cell = e.target;
-      if (e.inputType === "deleteContentBackward") {
-        cell.textContent = "";
-        return;
-      }
-      if (!cell.classList.contains("cell")) {return;}
-
-      const char = e.data[0];
-      if (char === " ") {return;}
-
-      const char_code = char.charCodeAt(0);
-      if (!((char_code >= 65 && char_code <= 90) || (char_code >= 97 && char_code <= 122))) {return;}
-
-      cell.textContent = char;
-    });
-
-    grid.addEventListener("keydown", (e) => {
-      const last_active_id = document.activeElement.id;
-      if (!last_active_id.includes("-")) {return;}
-
-      let to_focus;
-      switch (e.key) {
-        case "ArrowUp":
-          to_focus = document.getElementById(`${Number(last_active_id[0])-1}-${last_active_id[2]}`);
-          break;
-        case "ArrowDown":
-          to_focus = document.getElementById(`${Number(last_active_id[0])+1}-${last_active_id[2]}`);
-          break;
-        case "ArrowLeft":
-          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])-1}`);
-          break;
-        case "ArrowRight":
-          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])+1}`);
-          break;
-      }
-
-      if (!to_focus || to_focus.classList.contains("noninteract")) {return;}
-      to_focus.focus();
-    });
-
-    function text_to_array(text) {
-      let lines = text.split("\n");
-      let maxw = 0;
-      lines.forEach((line) => {maxw = Math.max(maxw, line.length);});
-      for (let i=0; i<lines.length; i++) {
-        let len_diff = maxw - lines[i].length;
-        lines[i] += " ".repeat(len_diff);
-      }
-
-      let arr = [];
-      for (let i=0; i<lines.length; i++) {
-        const line = lines[i];
-        if (line.trim().length === 0) {continue;}
-        let line_characters = [];
-        for (const ch of line) {
-          line_characters.push(ch.toUpperCase());
-        }
-        arr.push(line_characters);
-      }
-      return arr;
-    }
-
     </script>
   </body>
 </html>
