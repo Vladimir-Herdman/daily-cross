@@ -1,7 +1,6 @@
 :root {
   --cell-border: grey;
   --cell-bg: #ffffff;
-  --cell-size: 100px;
   --grid-bg: #000000;
 }
 
@@ -11,29 +10,96 @@
   padding: 0;
 }
 
+body {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+body > div {
+  display: flex;
+  flex-direction: row;
+}
+
+#puzzle-side {
+  border: solid blue 2px;
+  & .info-box {
+    background-color: lightcyan;
+  }
+}
+#hints-side {
+  border: solid red 2px;
+  width: 100%;
+}
+
 #grid {
-  width: fit-content;
-  height: fit-content;
+  counter-reset: cellnum 0;
+  height: 77vh;
+  aspect-ratio: 1/1;
+  border: solid black 12px;
   margin: 0;
+  margin-left: 10px;
   background-color: var(--grid-bg);
 
   display: grid;
-  /*grid-template-columns: repeat(5, 20px);*/
-  grid-auto-rows: var(--cell-size);
+  grid-template-columns: repeat(var(--numcols), 1fr); /*--variables set when adding text in js*/
+  grid-auto-rows: calc(100% / var(--numrows));
 }
 
 .cell {
+  position: relative;
   background-color: var(--cell-bg);
   border: solid 1px var(--cell-border);
   caret-color: transparent;
   display: flex;
   justify-content: center;
   align-items: center;
-}
-.cell:focus {
-  background-color: #FFCE1B;
+
+  &.word-highlight {
+    background-color: lightblue;
+    &:focus {
+      background-color: #FFCE1B;
+    }
+  }
+  &.noninteract {
+    background-color: var(--grid-bg);
+  }
+  &.num::before {
+    counter-increment: cellnum;
+    content: counter(cellnum);
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
 }
 
-.cell.noninteract {
-  background-color: var(--grid-bg);
+.info-box {
+  width: 80%;
+  height: 100px;
+  display: flex;
+  border: solid purple 2px;
+  justify-self: center;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+#title {
+  font-size: 64px;
+  font-family: 'Times New Roman', Times, serif;
+  font-weight: bold;
+}
+
+footer {
+	position: absolute;
+	width: 100%;
+	height: fit-content;
+  padding-bottom: 10px;
+  bottom: 0;
+
+  & p {
+    text-align: center;
+    padding: 10px 30px 0 30px;
+    font-size: 1rem;
+  }
 }

@@ -1,3 +1,9 @@
+<!-- TODO: 
+  - Better separate creation and solving mode.
+  - Actually work on creation mode, so people can make a crossword.
+  - Add hints to solution mode.
+  - Add a funny commercial to the bottom of the screen in place of the footer for Ada.
+-->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,107 +12,243 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <p id="title">The Daily Gander</p>
-    <div id="grid"></div>
+    <div>
+      <div id="puzzle-side">
+        <div class="info-box"></div>
+        <div id="grid"></div>
+      </div>
+      <div id="hints-side">
+        <div class="info-box"><p id="title">The Daily Gander</p></div>
+        <button onclick="button_save_grid()">save text as link</button>
+      </div>
+    </div>
+    <footer id="footer">
+      <p>Project developed by Vladimir Herdman | Check out some of my projects on <a class="link-with-underline" href="https://github.com/Vladimir-Herdman" target="_blank">GitHub.</a></p>
+      <p>Website HTML, CSS, and JS statically hosted through GitHub Pages at <a class="link-with-underline" href="https://github.com/Vladimir-Herdman/shareable-crossword" target="_blank">this repository</a></p>
+    </footer>
 
     <script>
-    const text = `
-this
- o  i 
- want
- o
-hooooly
-    n
-    l
-    y
-`;
-    const grid = document.getElementById("grid");
-    const arr = text_to_array(text);
+      const grid = document.getElementById("grid");
+      let max_rows;
+      let max_cols;
 
-    grid.style.gridTemplateColumns = `repeat(${arr[0].length}, var(--cell-size))`;
-    for (let i=0; i<arr.length; i++) {
-      for (let j=0; j<arr[0].length; j++) {
-        const cv = arr[i][j];
-        if (!(cv === " ")) {
-          grid.innerHTML += `<div class="cell" id="${i}-${j}" contenteditable="true"></div>`; //[column][row]
-        } else {
-          grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
+      async function decompress(encoded_b64) { //-> unencoded text
+        const byteArray = Uint8Array.fromBase64(encoded_b64, {alphabet: 'base64url'})
+        const stream = new DecompressionStream('deflate-raw')
+        const writer = stream.writable.getWriter()
+        writer.write(byteArray)
+        writer.close()
+        const buffer = await new Response(stream.readable).arrayBuffer()
+        return new TextDecoder().decode(buffer)
+      }
+
+      async function compress(str) {
+        const byteArray = new TextEncoder().encode(str);
+        const stream = new CompressionStream('deflate-raw');
+        const writer = stream.writable.getWriter();
+        writer.write(byteArray);
+        writer.close();
+        const buffer = await new Response(stream.readable).arrayBuffer();
+        return new Uint8Array(buffer).toBase64({alphabet: 'base64url'});
+      }
+
+      async function compress_grid_text() { //-> encoded text
+        let grid_text = "";
+        let lastrownum = 0;
+        for (const child of grid.children) {
+          if (child.id[0] != lastrownum) {
+            lastrownum = child.id[0];
+            grid_text += "\n"
+          }
+          const char = child.innerHTML;
+          if (char) grid_text += char;
+          else grid_text += " ";
+        }
+        return await compress(grid_text)
+      }
+
+      function text_to_array(grid_text) {
+        let lines = grid_text.split("\n");
+        let maxw = 0;
+        lines.forEach((line) => {maxw = Math.max(maxw, line.length);});
+        for (let i=0; i<lines.length; i++) {
+          let len_diff = maxw - lines[i].length;
+          lines[i] += " ".repeat(len_diff);
+        }
+
+        let arr = [];
+        for (let i=0; i<lines.length; i++) {
+          const line = lines[i];
+          if (line.trim().length === 0) continue;
+          let line_characters = [];
+          for (const ch of line) {
+            line_characters.push(ch.toUpperCase());
+          }
+          arr.push(line_characters);
+        }
+        return arr;
+      }
+
+      function focus_flood(curcell) {
+        if (curcell.classList.contains("noninteract")) return;
+        document.querySelectorAll("div.cell.word-highlight").forEach(hcell => {
+          hcell.classList.remove("word-highlight");
+        });
+
+        const cellid = curcell.id.split("-");
+        //Very cool querySelectorAll stuff, but gets all cells in cross, would need
+        //more work to use, so I'm just gonna stick with the for loops here.
+          // document.querySelectorAll(`[id^='${cellid[0]}-'],[id$='-${cellid[1]}']`).forEach(cell => {
+          //   cell.classList.add("word-highlight");
+          // });
+        for (let j=cellid[1]; j>=0; j--) {
+          let curcell = document.getElementById(`${cellid[0]}-${j}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let j=cellid[1]; j<max_cols; j++) {
+          let curcell = document.getElementById(`${cellid[0]}-${j}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let i=cellid[0]; i>=0; i--) {
+          let curcell = document.getElementById(`${i}-${cellid[1]}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let i=cellid[0]; i<max_rows; i++) {
+          let curcell = document.getElementById(`${i}-${cellid[1]}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
         }
       }
-    }
 
-    grid.addEventListener("beforeinput", (e) => {
-      const cell = e.target;
-      if (!cell.classList.contains("cell")) {return;}
-      if ((e.inputType === "insertText" && e.data === " ") || (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) {
-        e.preventDefault();
-        return;
-      }
-    });
+      function fill_grid_cells(grid_text) { //-> void
+        const arr = text_to_array(grid_text)
+        grid.innerHTML = "";
+        max_rows = arr.length;
+        max_cols = arr[0].length;
+        grid.style.setProperty("--numcols", max_cols);
+        grid.style.setProperty("--numrows", max_rows);
+        for (let i=0; i<max_rows; i++) {
+          for (let j=0; j<max_cols; j++) {
+            const cv = arr[i][j];
+            if (!(cv === " ")) {
+              grid.innerHTML += `<div class="cell" id="${i}-${j}" contenteditable="true"></div>`; //[column][row]
+            } else {
+              grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
+            }
+          }
 
-    grid.addEventListener("input", (e) => {
-      const cell = e.target;
-      if (e.inputType === "deleteContentBackward") {
-        cell.textContent = "";
-        return;
-      }
-      if (!cell.classList.contains("cell")) {return;}
-
-      const char = e.data[0];
-      if (char === " ") {return;}
-
-      const char_code = char.charCodeAt(0);
-      if (!((char_code >= 65 && char_code <= 90) || (char_code >= 97 && char_code <= 122))) {return;}
-
-      cell.textContent = char;
-    });
-
-    grid.addEventListener("keydown", (e) => {
-      const last_active_id = document.activeElement.id;
-      if (!last_active_id.includes("-")) {return;}
-
-      let to_focus;
-      switch (e.key) {
-        case "ArrowUp":
-          to_focus = document.getElementById(`${Number(last_active_id[0])-1}-${last_active_id[2]}`);
-          break;
-        case "ArrowDown":
-          to_focus = document.getElementById(`${Number(last_active_id[0])+1}-${last_active_id[2]}`);
-          break;
-        case "ArrowLeft":
-          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])-1}`);
-          break;
-        case "ArrowRight":
-          to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])+1}`);
-          break;
-      }
-
-      if (!to_focus || to_focus.classList.contains("noninteract")) {return;}
-      to_focus.focus();
-    });
-
-    function text_to_array(text) {
-      let lines = text.split("\n");
-      let maxw = 0;
-      lines.forEach((line) => {maxw = Math.max(maxw, line.length);});
-      for (let i=0; i<lines.length; i++) {
-        let len_diff = maxw - lines[i].length;
-        lines[i] += " ".repeat(len_diff);
-      }
-
-      let arr = [];
-      for (let i=0; i<lines.length; i++) {
-        const line = lines[i];
-        if (line.trim().length === 0) {continue;}
-        let line_characters = [];
-        for (const ch of line) {
-          line_characters.push(ch.toUpperCase());
+          //Only apply the blue flood on select event handler to active cells that have been made
+          document.querySelectorAll("div.cell:not(div.cell.noninteract)").forEach((cell) => {
+            cell.addEventListener("focus", (e) => {focus_flood(cell);});
+          });
         }
-        arr.push(line_characters);
-      }
-      return arr;
-    }
 
+        //Go back through and number horizontals and verticals in each section
+        for (let i=0; i<arr.length; i++) {
+          let horiz = vert = false;
+          for (let j=0; j<arr[0].length; j++) {
+            let cell = document.getElementById(`${i}-${j}`);
+            if (cell.classList.contains("noninteract")) {
+              horiz = false;
+              vert = false;
+              continue;
+            }
+            if (horiz === false && j !== arr[0].length-1 && arr[i][j+1] !== " ") {
+              horiz = true;
+              cell.classList.add("num");
+            }
+            if (vert === false && i !== arr.length-1 && arr[i+1][j] !== " ") {
+              if (i > 0 && arr[i-1][j] !== " ") continue;
+              vert = true;
+              cell.classList.add("num");
+            }
+          }
+        }
+      }
+
+      async function button_save_grid() {
+        const grid_encoded = await compress_grid_text();
+        const pzl_url = window.location.origin + "/?pzl=" + grid_encoded;
+        if (pzl_url.length > 2000) {console.error("URL number of characters greater than 2000, might not work in certain browsers.");}
+        await navigator.clipboard.writeText(pzl_url);
+      }
+
+      grid.addEventListener("beforeinput", (e) => {
+        const cell = e.target;
+        if (!cell.classList.contains("cell")) return;
+        if ((e.inputType === "insertText" && e.data === " ") || (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) {
+          e.preventDefault();
+          return;
+        }
+      });
+
+      grid.addEventListener("input", (e) => {
+        const cell = e.target;
+        if (e.inputType === "deleteContentBackward") {
+          cell.textContent = "";
+          return;
+        }
+        if (!cell.classList.contains("cell")) return;
+
+        const char = e.data[0];
+        if (char === " ") return;
+
+        const char_code = char.charCodeAt(0);
+        if (!((char_code >= 65 && char_code <= 90) || (char_code >= 97 && char_code <= 122))) return;
+
+        cell.textContent = char;
+      });
+
+      grid.addEventListener("keydown", (e) => {
+        let last_active_id = document.activeElement.id;
+        if (!last_active_id.includes("-")) return;
+        const [row, col] = last_active_id.split("-");
+
+        let to_focus;
+        switch (e.key) {
+          case "ArrowUp":
+            to_focus = document.getElementById(`${Number(row)-1}-${col}`);
+            break;
+          case "ArrowDown":
+            to_focus = document.getElementById(`${Number(row)+1}-${col}`);
+            break;
+          case "ArrowLeft":
+            to_focus = document.getElementById(`${row}-${Number(col)-1}`);
+            break;
+          case "ArrowRight":
+            to_focus = document.getElementById(`${row}-${Number(col)+1}`);
+            break;
+        }
+
+        if (!to_focus || to_focus.classList.contains("noninteract")) return;
+        to_focus.focus();
+      });
+
+      async function main() {
+        //pzl in URL, so load given puzzle
+        try {
+          const pzl_encoding = new URLSearchParams(window.location.search).get("pzl");
+          fill_grid_cells(await decompress(pzl_encoding));
+        } catch { //pzl didn't work, so open crossword builder page
+          const text =
+            " c\n" +
+            " r\n" +
+            "no\n" +
+            " s\n" +
+            " s\n" +
+            " s\n" +
+            " was\n" +
+            " o\n" +
+            " recieved\n" +
+            " d\n"
+          ;
+          fill_grid_cells(text);
+        }
+      }
+      main();
     </script>
   </body>
 </html>
