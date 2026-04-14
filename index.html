@@ -1,3 +1,9 @@
+<!-- TODO: 
+  - Better separate creation and solving mode.
+  - Actually work on creation mode, so people can make a crossword.
+  - Add hints to solution mode.
+  - Add a funny commercial to the bottom of the screen in place of the footer for Ada.
+-->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -8,15 +14,16 @@
   <body>
     <div>
       <div id="puzzle-side">
+        <div class="info-box"></div>
         <div id="grid"></div>
       </div>
       <div id="hints-side">
-        <p id="title">The Daily Gander</p>
+        <div class="info-box"><p id="title">The Daily Gander</p></div>
         <button onclick="button_save_grid()">save text as link</button>
       </div>
     </div>
     <footer id="footer">
-      <p>Project developed by Vladimir Herdman | Check out some projects on my <a class="link-with-underline" href="https://github.com/Vladimir-Herdman" target="_blank">GitHub.</a></p>
+      <p>Project developed by Vladimir Herdman | Check out some of my projects on <a class="link-with-underline" href="https://github.com/Vladimir-Herdman" target="_blank">GitHub.</a></p>
       <p>Website HTML, CSS, and JS statically hosted through GitHub Pages at <a class="link-with-underline" href="https://github.com/Vladimir-Herdman/shareable-crossword" target="_blank">this repository</a></p>
     </footer>
 
@@ -82,6 +89,40 @@
         return arr;
       }
 
+      function focus_flood(curcell) {
+        if (curcell.classList.contains("noninteract")) return;
+        document.querySelectorAll("div.cell.word-highlight").forEach(hcell => {
+          hcell.classList.remove("word-highlight");
+        });
+
+        const cellid = curcell.id.split("-");
+        //Very cool querySelectorAll stuff, but gets all cells in cross, would need
+        //more work to use, so I'm just gonna stick with the for loops here.
+          // document.querySelectorAll(`[id^='${cellid[0]}-'],[id$='-${cellid[1]}']`).forEach(cell => {
+          //   cell.classList.add("word-highlight");
+          // });
+        for (let j=cellid[1]; j>=0; j--) {
+          let curcell = document.getElementById(`${cellid[0]}-${j}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let j=cellid[1]; j<max_cols; j++) {
+          let curcell = document.getElementById(`${cellid[0]}-${j}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let i=cellid[0]; i>=0; i--) {
+          let curcell = document.getElementById(`${i}-${cellid[1]}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+        for (let i=cellid[0]; i<max_rows; i++) {
+          let curcell = document.getElementById(`${i}-${cellid[1]}`);
+          if (curcell.classList.contains("noninteract")) break;
+          curcell.classList.add("word-highlight");
+        }
+      }
+
       function fill_grid_cells(grid_text) { //-> void
         const arr = text_to_array(grid_text)
         grid.innerHTML = "";
@@ -98,6 +139,11 @@
               grid.innerHTML += `<div class="cell noninteract" id="${i}-${j}"></div>`;
             }
           }
+
+          //Only apply the blue flood on select event handler to active cells that have been made
+          document.querySelectorAll("div.cell:not(div.cell.noninteract)").forEach((cell) => {
+            cell.addEventListener("focus", (e) => {focus_flood(cell);});
+          });
         }
 
         //Go back through and number horizontals and verticals in each section
@@ -125,46 +171,10 @@
 
       async function button_save_grid() {
         const grid_encoded = await compress_grid_text();
-        //TODO: Still checking against localhost size (18), change to https type check
-        if (18 + grid_encoded.length > 2000) {console.error("URL number of characters greater than 2000, might not work in certain browsers.");}
-        //TODO: Still using localhost, change for use in both localhost and https style
-        await navigator.clipboard.writeText(`localhost:8001/?pzl=${grid_encoded}`);
+        const pzl_url = window.location.origin + "/?pzl=" + grid_encoded;
+        if (pzl_url.length > 2000) {console.error("URL number of characters greater than 2000, might not work in certain browsers.");}
+        await navigator.clipboard.writeText(pzl_url);
       }
-
-      grid.addEventListener("mousedown", (e) => {
-        const curcell = e.target;
-        if (curcell.classList.contains("noninteract")) return;
-        document.querySelectorAll("div.cell.word-highlight").forEach(hcell => {
-          hcell.classList.remove("word-highlight");
-        });
-
-        const cellid = curcell.id.split("-");
-        //Very cool querySelectorAll stuff, but gets all cells in cross, would need
-        //more work to use, so I'm just gonna stick with the for loops here.
-          // document.querySelectorAll(`[id^='${cellid[0]}-'],[id$='-${cellid[1]}']`).forEach(cell => {
-            //   cell.classList.add("word-highlight");
-            // });
-        for (let j=cellid[1]; j>=0; j--) {
-          let curcell = document.getElementById(`${cellid[0]}-${j}`);
-          if (curcell.classList.contains("noninteract")) break;
-          curcell.classList.add("word-highlight");
-        }
-        for (let j=cellid[1]; j<max_cols; j++) {
-          let curcell = document.getElementById(`${cellid[0]}-${j}`);
-          if (curcell.classList.contains("noninteract")) break;
-          curcell.classList.add("word-highlight");
-        }
-        for (let i=cellid[0]; i>=0; i--) {
-          let curcell = document.getElementById(`${i}-${cellid[1]}`);
-          if (curcell.classList.contains("noninteract")) break;
-          curcell.classList.add("word-highlight");
-        }
-        for (let i=cellid[0]; i<max_rows; i++) {
-          let curcell = document.getElementById(`${i}-${cellid[1]}`);
-          if (curcell.classList.contains("noninteract")) break;
-          curcell.classList.add("word-highlight");
-        }
-      });
 
       grid.addEventListener("beforeinput", (e) => {
         const cell = e.target;
@@ -193,22 +203,23 @@
       });
 
       grid.addEventListener("keydown", (e) => {
-        const last_active_id = document.activeElement.id;
+        let last_active_id = document.activeElement.id;
         if (!last_active_id.includes("-")) return;
+        const [row, col] = last_active_id.split("-");
 
         let to_focus;
         switch (e.key) {
           case "ArrowUp":
-            to_focus = document.getElementById(`${Number(last_active_id[0])-1}-${last_active_id[2]}`);
+            to_focus = document.getElementById(`${Number(row)-1}-${col}`);
             break;
           case "ArrowDown":
-            to_focus = document.getElementById(`${Number(last_active_id[0])+1}-${last_active_id[2]}`);
+            to_focus = document.getElementById(`${Number(row)+1}-${col}`);
             break;
           case "ArrowLeft":
-            to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])-1}`);
+            to_focus = document.getElementById(`${row}-${Number(col)-1}`);
             break;
           case "ArrowRight":
-            to_focus = document.getElementById(`${last_active_id[0]}-${Number(last_active_id[2])+1}`);
+            to_focus = document.getElementById(`${row}-${Number(col)+1}`);
             break;
         }
 
@@ -217,10 +228,11 @@
       });
 
       async function main() {
+        //pzl in URL, so load given puzzle
         try {
           const pzl_encoding = new URLSearchParams(window.location.search).get("pzl");
           fill_grid_cells(await decompress(pzl_encoding));
-        } catch {
+        } catch { //pzl didn't work, so open crossword builder page
           const text =
             " c\n" +
             " r\n" +
